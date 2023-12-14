@@ -25,11 +25,7 @@ export default function Welcome(props) {
 				<Grid item xs={12}>
 					<Typography align="center">
 						<Trans>
-							Welcome. Free for private and commercial use. Further help in the{' '}
-							<Link color="secondary" target="_blank" href="https://docs.datarhei.com">
-								docs
-							</Link>
-							.
+							Welcome to Team in UA Restreamer.
 						</Trans>
 					</Typography>
 				</Grid>
