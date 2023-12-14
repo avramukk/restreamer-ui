@@ -25,7 +25,7 @@ export default function Welcome(props) {
 				<Grid item xs={12}>
 					<Typography align="center">
 						<Trans>
-							Welcome to Restreamer v2, the solution for fast and easy video publishing. Free for private and commercial use. Further help in the{' '}
+							Welcome. Free for private and commercial use. Further help in the{' '}
 							<Link color="secondary" target="_blank" href="https://docs.datarhei.com">
 								docs
 							</Link>

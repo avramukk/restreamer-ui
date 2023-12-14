@@ -25,7 +25,7 @@ const useStyles = makeStyles((theme) => ({
 		position: 'fixed',
 		bottom: 0,
 		width: '100%',
-		height: 60,
+		height: 30,
 		background: `-webkit-linear-gradient(left, ${theme.palette.background.footer1} 0, ${theme.palette.background.footer2} 100%)`,
 		color: theme.palette.text.secondary,
 		'& .footerLeft': {

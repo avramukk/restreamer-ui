@@ -12,7 +12,7 @@ export default {
 		// MuiAccordion
 		accordion_border: 'rgba(128, 128, 128, .6)',
 		// MuiMenuItem, Header.js (MenuIcon, MenuItem), Progress.js (Progress boxes)
-		box_default: 'rgb(77, 77, 77)',
+		box_default: 'rgba(0,0,0,0.5)',
 		// MuiListItem, Progress.js (Progress boxes - danger)
 		box_danger: 'rgb(193, 39, 45)',
 		// MuiButton, global.js (Page background)
@@ -20,19 +20,19 @@ export default {
 		// MuiButton, MuiMenu, MuiToggleButton, MultiSelectOption.js (MenuItem)
 		dark1: 'rgba(0, 0, 0, .1)',
 		// MuiOutlinedInput, BoxText.js (color=dark)
-		dark2: 'rgba(0, 0, 0, .25)',
+		dark2: 'rgba(0,0,0,0.5)',
 		// Footer.js, Textarea.js, global.js (Scrollbar)
-		footer1: 'rgba(66, 61, 63, .9)',
+		footer1: 'rgba(0,0,0,0.5)',
 		// Footer.js, Textarea.js
-		footer2: 'rgba(39, 36, 37, .9)',
+		footer2: 'rgba(0,0,0,0.5)',
 		// MuiAppBar, BoxText.js (color=light = default), TabsHorizontal.js, Paper.js
 		light1: 'rgba(255, 255, 255, .1)',
 		// MuiDialog, MuiPaper, MuiTooltip, Header.js, ModalContent.js, Dialog.js
-		modal: 'rgb(71, 71, 71)',
+		modal: 'rgba(0,0,0,0.5)',
 		// BoxTextarea.js, Progress.js, Process.js, Textarea.js, gobal.js (textarea)
-		modalbox: 'rgb(91, 91, 91)',
+		modalbox: 'rgba(0,0,0,0.5)',
 		// MuiFab, MuiListItem, MuiPaper, Headerjs,
-		paper: 'rgba(56, 56, 56, .95)',
+		paper: 'rgba(0,0,0,0.5)',
 	},
 	default: {
 		main: '#686868',
@@ -43,7 +43,7 @@ export default {
 		// MuiAlert, MuiMenu, MuiOutlinedInput, MuiSelect
 		main: '#686868',
 		// MuiMenu, MuiOutlinedInput
-		dark: '#4D4D4D',
+		dark: 'rgba(0,0,0,0.7)',
 		// MuiButton
 		contrastText: '#fff',
 	},

@@ -75,7 +75,7 @@ const useStyles = makeStyles((theme) => ({
 		},
 		'& .headerTitle': {
 			fontFamily: '"Dosis", "Roboto", "Helvetica", "Arial", sans-serif',
-			fontSize: '3rem',
+			fontSize: '30px',
 			fontWeight: 300,
 			marginLeft: 10,
 			marginBottom: '0.2em',
@@ -217,7 +217,7 @@ function AboutModal(props) {
 
 AboutModal.defaultProps = {
 	open: false,
-	onClose: () => {},
+	onClose: () => { },
 };
 
 function HeaderMenu(props) {
@@ -349,10 +349,10 @@ function HeaderMenu(props) {
 }
 
 HeaderMenu.defaultProps = {
-	onChannel: () => {},
-	onPlayersite: () => {},
-	onSettings: () => {},
-	onLogout: () => {},
+	onChannel: () => { },
+	onPlayersite: () => { },
+	onSettings: () => { },
+	onLogout: () => { },
 	expand: false,
 	showPlayersite: false,
 	showSettings: false,
@@ -368,7 +368,7 @@ export default function Header(props) {
 			<Grid item xs={12}>
 				<Stack direction="row" justifyContent="space-between" alignItems="center" spacing={0}>
 					<Stack direction="row" alignItems="center" spacing={0} className="headerLeft">
-						<Logo className="fabIcon" />
+						{/* <Logo className="fabIcon" /> */}
 						<Typography className="headerTitle">Restreamer</Typography>
 					</Stack>
 					<Stack className="headerRight" direction="row" alignItems="center" spacing={0}>

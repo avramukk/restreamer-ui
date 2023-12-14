@@ -16,8 +16,8 @@ import FormInlineButton from '../../../misc/FormInlineButton';
 import UploadButton from '../../../misc/UploadButton';
 
 const imageTypes = [
-	{ mimetype: 'image/*', extension: 'image', maxSize: 2 * 1024 * 1024 },
-	{ mimetype: 'video/*', extension: 'video', maxSize: 25 * 1024 * 1024 },
+	{ mimetype: 'image/*', extension: 'image', maxSize: 50 * 1024 * 1024 },
+	{ mimetype: 'video/*', extension: 'video', maxSize: 100 * 1024 * 1024 },
 ];
 
 const useStyles = makeStyles((theme) => ({
@@ -186,9 +186,9 @@ function Source(props) {
 Source.defaultProps = {
 	knownDevices: [],
 	settings: {},
-	onChange: function (settings) {},
-	onProbe: function (settings, inputs) {},
-	onRefresh: function () {},
+	onChange: function (settings) { },
+	onProbe: function (settings, inputs) { },
+	onRefresh: function () { },
 	onStore: function (name, data) {
 		return '';
 	},
