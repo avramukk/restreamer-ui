@@ -17,7 +17,7 @@ import UploadButton from '../../../misc/UploadButton';
 
 const imageTypes = [
 	{ mimetype: 'image/*', extension: 'image', maxSize: 50 * 1024 * 1024 },
-	{ mimetype: 'video/*', extension: 'video', maxSize: 100 * 1024 * 1024 },
+	{ mimetype: 'video/*', extension: 'video', maxSize: 1000 * 1024 * 1024 }, // 100 MB
 ];
 
 const useStyles = makeStyles((theme) => ({
