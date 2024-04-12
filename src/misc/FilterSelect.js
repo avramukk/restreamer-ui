@@ -91,7 +91,7 @@ export default function FilterSelect(props) {
 				}
 
 				filterSettings.push(
-					<Settings key={c.filter} settings={profile.filter.settings[c.filter].settings} onChange={handleFilterSettingsChange(c.filter)} />
+					<Settings key={c.filter} settings={profile.filter.settings[c.filter].settings} onChange={handleFilterSettingsChange(c.filter)} />,
 				);
 			}
 		}

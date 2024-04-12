@@ -1,16 +1,19 @@
 import { i18n } from '@lingui/core';
 import { t } from '@lingui/macro';
 import { v4 as uuidv4 } from 'uuid';
-import { jwtDecode } from "jwt-decode";
+import { jwtDecode } from 'jwt-decode';
 import Handlebars from 'handlebars/dist/cjs/handlebars';
 import SemverSatisfies from 'semver/functions/satisfies';
 import SemverGt from 'semver/functions/gt';
 import SemverGte from 'semver/functions/gte';
+import SemverMajor from 'semver/functions/major';
+import SemverMinor from 'semver/functions/minor';
 
 import * as M from './metadata';
 import * as Storage from './storage';
 import * as Version from '../version';
 import API from './api';
+import { anonymize } from './anonymizer';
 
 class Restreamer {
 	constructor(address) {
@@ -477,6 +480,8 @@ class Restreamer {
 		const skills = {
 			ffmpeg: {
 				version: '',
+				version_major: 0,
+				version_minor: 0,
 			},
 			codecs: {
 				audio: {
@@ -508,6 +513,7 @@ class Restreamer {
 				virtualaudio: [],
 				virtualvideo: [],
 				videoloop: [],
+				audioloop: [],
 			},
 			sinks: {},
 		};
@@ -533,6 +539,9 @@ class Restreamer {
 			version: '0.0.0',
 			...val.ffmpeg,
 		};
+
+		skills.ffmpeg.version_major = SemverMajor(skills.ffmpeg.version);
+		skills.ffmpeg.version_minor = SemverMinor(skills.ffmpeg.version);
 
 		val.codecs = {
 			audio: {},
@@ -647,6 +656,26 @@ class Restreamer {
 				}
 			}
 		}
+
+		let channels = (await this.ListRTMPChannels()).map((name) => {
+			return {
+				media: 'rtmp',
+				id: name,
+				name: name,
+			};
+		});
+
+		skills.sources['network'].push(...channels);
+
+		channels = (await this.ListSRTChannels()).map((name) => {
+			return {
+				media: 'srt',
+				id: name,
+				name: name,
+			};
+		});
+
+		skills.sources['network'].push(...channels);
 
 		this.skills = skills;
 	}
@@ -858,7 +887,7 @@ class Restreamer {
 		if (config.source.network.rtmp.secure === true) {
 			const [, rtmp_port] = splitHostPort(val.config.rtmp.address_tls);
 			if (rtmp_port !== '1935') {
-				config.source.network.rtmp.host += ':' + rtmp_port;
+				config.source.network.rtmp.host = config.hostname + ':' + rtmp_port;
 			}
 		}
 
@@ -901,9 +930,7 @@ class Restreamer {
 	ConfigActive() {
 		const config = JSON.parse(JSON.stringify(this.config));
 
-		config.source.network.rtmp.name = this.channel.channelid;
-		config.source.network.hls.name = this.channel.channelid;
-		config.source.network.srt.name = this.channel.channelid;
+		config.source.network.channelid = this.channel.channelid;
 
 		return config;
 	}
@@ -2596,12 +2623,32 @@ class Restreamer {
 		// from the inputs only the first is used and only its options are considered.
 
 		let address = '';
+		let options = [];
 		if (control.source.source === 'hls+memfs') {
 			address = `{memfs}/${channel.channelid}.m3u8`;
+			options.push('-re');
 		} else if (control.source.source === 'hls+diskfs') {
 			address = `{diskfs}/${channel.channelid}.m3u8`;
+			options.push('-re');
 		} else if (control.source.source === 'rtmp') {
 			address = `{rtmp,name=${channel.channelid}.stream}`;
+			const skills = this.Skills();
+			if (skills.ffmpeg.version_major >= 6) {
+				const codecs = [];
+				if (skills.codecs.video.hevc?.length > 0) {
+					codecs.push('hvc1');
+				}
+				if (skills.codecs.video.av1?.length > 0) {
+					codecs.push('av01');
+				}
+				if (skills.codecs.video.vp9?.length > 0) {
+					codecs.push('vp09');
+				}
+
+				if (codecs.length !== 0) {
+					options.push('-rtmp_enhanced_codecs', codecs.join(','));
+				}
+			}
 		} else if (control.source.source === 'srt') {
 			address = `{srt,name=${channel.channelid},mode=request}`;
 		}
@@ -2614,7 +2661,7 @@ class Restreamer {
 				{
 					id: 'input_0',
 					address: address,
-					options: ['-re', ...inputs[0].options],
+					options: [...options, ...inputs[0].options],
 				},
 			],
 			output: [],
@@ -2770,6 +2817,18 @@ class Restreamer {
 		};
 
 		return data;
+	}
+
+	// RTMP
+
+	async ListRTMPChannels() {
+		return await this._listRTMPChannels();
+	}
+
+	// SRT
+
+	async ListSRTChannels() {
+		return await this._listSRTChannels();
 	}
 
 	// Expert Mode
@@ -2999,51 +3058,35 @@ class Restreamer {
 			return null;
 		}
 
-		const regex = /(?:([a-z]+):)?\/[^\s]*/gm;
-		const replace = (s) => {
-			return s.replaceAll(regex, (match, scheme) => {
-				if (scheme) {
-					return `${scheme}://[anonymized]`;
-				}
-
-				const pathElm = match.split('/').filter((p) => p.length !== 0);
-				if (pathElm.length < 2) {
-					return match;
-				}
-
-				return `/[anonymized]/${pathElm.pop()}`;
-			});
-		};
-
 		if (p.config) {
-			p.config.options = p.config.options.map(replace);
+			p.config.options = p.config.options.map(anonymize);
 
 			for (let i in p.config.input) {
-				p.config.input[i].address = replace(p.config.input[i].address);
-				p.config.input[i].options = p.config.input[i].options.map(replace);
+				p.config.input[i].address = anonymize(p.config.input[i].address);
+				p.config.input[i].options = p.config.input[i].options.map(anonymize);
 			}
 
 			for (let i in p.config.output) {
-				p.config.output[i].address = replace(p.config.output[i].address);
-				p.config.output[i].options = p.config.output[i].options.map(replace);
+				p.config.output[i].address = anonymize(p.config.output[i].address);
+				p.config.output[i].options = p.config.output[i].options.map(anonymize);
 			}
 		}
 
 		if (p.state) {
 			for (let i in p.state.progress.inputs) {
-				p.state.progress.inputs[i].address = replace(p.state.progress.inputs[i].address);
+				p.state.progress.inputs[i].address = anonymize(p.state.progress.inputs[i].address);
 			}
 
 			for (let i in p.state.progress.outputs) {
-				p.state.progress.outputs[i].address = replace(p.state.progress.outputs[i].address);
+				p.state.progress.outputs[i].address = anonymize(p.state.progress.outputs[i].address);
 			}
 
 			if (!p.state.command) {
 				p.state.command = [];
 			}
 
-			p.state.command = p.state.command.map(replace);
-			p.state.last_logline = replace(p.state.last_logline);
+			p.state.command = p.state.command.map(anonymize);
+			p.state.last_logline = anonymize(p.state.last_logline);
 		}
 
 		if (p.report) {
@@ -3051,12 +3094,12 @@ class Restreamer {
 				p.report.prelude = [];
 			}
 
-			p.report.prelude = p.report.prelude.map(replace);
-			p.report.log = p.report.log.map((l) => [l[0], replace(l[1])]);
+			p.report.prelude = p.report.prelude.map(anonymize);
+			p.report.log = p.report.log.map((l) => [l[0], anonymize(l[1])]);
 
 			for (let i in p.report.history) {
-				p.report.history[i].prelude = p.report.history[i].prelude.map(replace);
-				p.report.history[i].log = p.report.history[i].log.map((l) => [l[0], replace(l[1])]);
+				p.report.history[i].prelude = p.report.history[i].prelude.map(anonymize);
+				p.report.history[i].log = p.report.history[i].log.map((l) => [l[0], anonymize(l[1])]);
 			}
 		}
 
@@ -3267,6 +3310,24 @@ class Restreamer {
 		return val.map((f) => f.name);
 	}
 
+	async _listRTMPChannels() {
+		const [val, err] = await this._call(this.api.RTMPChannels);
+		if (err !== null) {
+			return [];
+		}
+
+		return val;
+	}
+
+	async _listSRTChannels() {
+		const [val, err] = await this._call(this.api.SRTChannels);
+		if (err !== null) {
+			return [];
+		}
+
+		return val;
+	}
+
 	async _getAboutDebug() {
 		const about = await this.About();
 
@@ -3299,12 +3360,28 @@ class Restreamer {
 		config.storage.memory.auth.username = '[anonymized]';
 		config.storage.memory.auth.password = '[anonymized]';
 
+		config.storage.s3 = config.storage.s3.map((e) => {
+			return {
+				...e,
+				auth: {
+					...e.auth,
+					username: '[anonymized]',
+					password: '[anonymized]',
+				},
+				endpoint: '[anonymized]',
+				access_key_id: '[anonymized]',
+				secret_access_key: '[anonymized]',
+			};
+		});
+
 		if (config.storage.cors.origins.length !== 1 || config.storage.cors.origins[0] !== '*') {
 			config.storage.cors.origins = config.storage.cors.origins.map((e) => '[anonymized]');
 		}
 
 		config.rtmp.app = '[anonymized]';
 		config.rtmp.token = '[anonymized]';
+
+		config.ffmpeg.binary = anonymize(config.ffmpeg.binary);
 
 		config.service.token = '[anonymized]';
 
@@ -3328,6 +3405,9 @@ class Restreamer {
 			frames: 0,
 			drop: 0,
 			dup: 0,
+			command: [],
+			cpu: 0,
+			memory: 0,
 		};
 
 		if (state === null) {
@@ -3336,6 +3416,7 @@ class Restreamer {
 
 		progress.valid = true;
 		progress.order = state.order;
+		progress.command = state.command.slice();
 
 		const fps = state.progress.fps || 0;
 
@@ -3367,6 +3448,8 @@ class Restreamer {
 			progress.frames = state.progress.frames || 0;
 			progress.drop = state.progress.drop || 0;
 			progress.dup = state.progress.dup || 0;
+			progress.cpu = state.cpu_usage || 0;
+			progress.memory = state.memory_bytes || 0;
 		}
 
 		return progress;

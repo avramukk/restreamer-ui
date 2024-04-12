@@ -15,7 +15,7 @@ import Select from '../../../misc/Select';
 
 const id = 'youtube';
 const name = 'YouTube Live';
-const version = '1.0';
+const version = '1.1';
 const stream_key_link = 'https://www.youtube.com/live_dashboard';
 const description = (
 	<Trans>
@@ -54,7 +54,7 @@ const requires = {
 	formats: ['flv', 'hls'],
 	codecs: {
 		audio: ['aac', 'mp3'],
-		video: ['h264'],
+		video: ['h264', 'hevc', 'av1'],
 	},
 };
 
@@ -99,18 +99,34 @@ function Service(props) {
 		}
 
 		if (settings.mode === 'rtmps') {
+			let options = ['-f', 'flv'];
+
+			if (props.skills.ffmpeg.version_major >= 6) {
+				const codecs = [];
+				if (props.skills.codecs.video.includes('hevc')) {
+					codecs.push('hvc1');
+				}
+				if (props.skills.codecs.video.includes('av1')) {
+					codecs.push('av01');
+				}
+
+				if (codecs.length !== 0) {
+					options.push('-rtmp_enhanced_codecs', codecs.join(','));
+				}
+			}
+
 			// https://developers.google.com/youtube/v3/live/guides/rtmps-ingestion
 			if (settings.primary === true) {
 				outputs.push({
 					address: 'rtmps://a.rtmp.youtube.com/live2/' + settings.stream_key,
-					options: ['-f', 'flv'],
+					options: options.slice(),
 				});
 			}
 
 			if (settings.backup === true) {
 				outputs.push({
 					address: 'rtmps://b.rtmp.youtube.com/live2?backup=1/' + settings.stream_key,
-					options: ['-f', 'flv'],
+					options: options.slice(),
 				});
 			}
 		} else if (settings.mode === 'hls') {

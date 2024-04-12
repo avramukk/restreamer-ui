@@ -1,6 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import SemverSatisfies from 'semver/functions/satisfies';
 
 import { useLingui } from '@lingui/react';
 import { Trans, t } from '@lingui/macro';
@@ -14,6 +13,7 @@ import Button from '@mui/material/Button';
 import Grid from '@mui/material/Grid';
 import Icon from '@mui/icons-material/AccountTree';
 import MenuItem from '@mui/material/MenuItem';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import WarningIcon from '@mui/icons-material/Warning';
@@ -34,7 +34,7 @@ const useStyles = makeStyles((theme) => ({
 	},
 }));
 
-const initSettings = (initialSettings) => {
+const initSettings = (initialSettings, config) => {
 	if (!initialSettings) {
 		initialSettings = {};
 	}
@@ -53,6 +53,7 @@ const initSettings = (initialSettings) => {
 
 	settings.push = {
 		type: 'rtmp',
+		name: config.channelid,
 		...settings.push,
 	};
 
@@ -99,6 +100,7 @@ const initConfig = (initialConfig) => {
 		rtmp: {},
 		srt: {},
 		hls: {},
+		channelid: 'external',
 		...initialConfig,
 	};
 
@@ -109,7 +111,6 @@ const initConfig = (initialConfig) => {
 		local: 'localhost',
 		app: '',
 		token: '',
-		name: 'external',
 		...config.rtmp,
 	};
 
@@ -119,7 +120,6 @@ const initConfig = (initialConfig) => {
 		local: 'localhost',
 		token: '',
 		passphrase: '',
-		name: 'external',
 		...config.srt,
 	};
 
@@ -128,7 +128,6 @@ const initConfig = (initialConfig) => {
 		host: 'localhost',
 		local: 'localhost',
 		credentials: '',
-		name: 'external',
 		...config.hls,
 	};
 
@@ -149,6 +148,8 @@ const initSkills = (initialSkills) => {
 
 	skills.ffmpeg = {
 		version: '0.0.0',
+		version_major: 0,
+		version_minor: 0,
 		...skills.ffmpeg,
 	};
 
@@ -166,6 +167,12 @@ const initSkills = (initialSkills) => {
 		if (!skills.protocols.input.includes('rtsp')) {
 			skills.protocols.input.push('rtsp');
 		}
+
+		if (skills.protocols.input.includes('tls')) {
+			if (!skills.protocols.input.includes('rtsps')) {
+				skills.protocols.input.push('rtsps');
+			}
+		}
 	}
 
 	return skills;
@@ -173,12 +180,8 @@ const initSkills = (initialSkills) => {
 
 const createInputs = (settings, config, skills) => {
 	config = initConfig(config);
+	settings = initSettings(settings, config);
 	skills = initSkills(skills);
-
-	let ffmpeg_version = 4;
-	if (SemverSatisfies(skills.ffmpeg.version, '^5.0.0')) {
-		ffmpeg_version = 5;
-	}
 
 	const input = {
 		address: '',
@@ -186,12 +189,22 @@ const createInputs = (settings, config, skills) => {
 	};
 
 	if (settings.mode === 'push') {
+		let name = settings.push.name;
 		if (settings.push.type === 'hls') {
-			input.address = getLocalHLS(config);
+			if (name === 'none') {
+				name = config.channelid;
+			}
+			input.address = getLocalHLS(name);
 		} else if (settings.push.type === 'rtmp') {
-			input.address = getLocalRTMP(config);
+			if (name === config.channelid) {
+				name += '.stream';
+			}
+			input.address = getLocalRTMP(name);
 		} else if (settings.push.type === 'srt') {
-			input.address = getLocalSRT(config);
+			if (name === config.channelid) {
+				name += '.stream';
+			}
+			input.address = getLocalSRT(name);
 		} else {
 			input.address = '';
 		}
@@ -222,7 +235,7 @@ const createInputs = (settings, config, skills) => {
 	if (settings.general.use_wallclock_as_timestamps) {
 		input.options.push('-use_wallclock_as_timestamps', '1');
 	}
-	if (ffmpeg_version === 5 && settings.general.avoid_negative_ts !== 'auto') {
+	if (skills.ffmpeg.version_major >= 5 && settings.general.avoid_negative_ts !== 'auto') {
 		input.options.push('-avoid_negative_ts', settings.general.avoid_negative_ts);
 	}
 
@@ -239,6 +252,23 @@ const createInputs = (settings, config, skills) => {
 			if (settings.general.analyzeduration_rtmp !== 5000000) {
 				input.options.push('-analyzeduration', settings.general.analyzeduration_rtmp);
 			}
+
+			if (skills.ffmpeg.version_major >= 6) {
+				const codecs = [];
+				if (skills.codecs.video.hevc?.length > 0) {
+					codecs.push('hvc1');
+				}
+				if (skills.codecs.video.av1?.length > 0) {
+					codecs.push('av01');
+				}
+				if (skills.codecs.video.vp9?.length > 0) {
+					codecs.push('vp09');
+				}
+
+				if (codecs.length !== 0) {
+					input.options.push('-rtmp_enhanced_codecs', codecs.join(','));
+				}
+			}
 		} else if (settings.push.type === 'srt') {
 			if (settings.general.analyzeduration !== 5000000) {
 				input.options.push('-analyzeduration', settings.general.analyzeduration);
@@ -253,6 +283,23 @@ const createInputs = (settings, config, skills) => {
 			if (settings.general.analyzeduration_rtmp !== 5000000) {
 				input.options.push('-analyzeduration', settings.general.analyzeduration_rtmp);
 			}
+
+			if (skills.ffmpeg.version_major >= 6) {
+				const codecs = [];
+				if (skills.codecs.video.hevc?.length > 0) {
+					codecs.push('hvc1');
+				}
+				if (skills.codecs.video.av1?.length > 0) {
+					codecs.push('av01');
+				}
+				if (skills.codecs.video.vp9?.length > 0) {
+					codecs.push('vp09');
+				}
+
+				if (codecs.length !== 0) {
+					input.options.push('-rtmp_enhanced_codecs', codecs.join(','));
+				}
+			}
 		} else {
 			if (settings.general.analyzeduration !== 5000000) {
 				input.options.push('-analyzeduration', settings.general.analyzeduration);
@@ -264,7 +311,7 @@ const createInputs = (settings, config, skills) => {
 		input.address = addUsernamePassword(input.address, settings.username, settings.password);
 
 		if (protocol === 'rtsp') {
-			if (ffmpeg_version === 4) {
+			if (skills.ffmpeg.version_major === 4) {
 				input.options.push('-stimeout', settings.rtsp.stimeout);
 			} else {
 				input.options.push('-timeout', settings.rtsp.stimeout);
@@ -358,6 +405,8 @@ const getProtocolClass = (url) => {
 		return 'http';
 	} else if (/mms(t|h)/.test(protocol) === true) {
 		return 'mms';
+	} else if (/rtsps?/.test(protocol) === true) {
+		return 'rtsp';
 	}
 
 	return protocol;
@@ -406,7 +455,7 @@ const getRTMPAddress = (host, app, name, token, secure) => {
 	let url = 'rtmp' + (secure ? 's' : '') + '://' + host + app + '/' + name + '.stream';
 
 	if (token.length !== 0) {
-		url += '?token=' + encodeURIComponent(token);
+		url += '/token=' + encodeURIComponent(token);
 	}
 
 	return url;
@@ -419,7 +468,7 @@ const getSRTAddress = (host, name, token, passphrase, publish) => {
 		host +
 		'?mode=caller&transtype=live&streamid=' +
 		name +
-		',mode:' +
+		'.stream,mode:' +
 		(publish ? 'publish' : 'request') +
 		(token.length !== 0 ? ',token:' + encodeURIComponent(token) : '');
 
@@ -431,35 +480,35 @@ const getSRTAddress = (host, name, token, passphrase, publish) => {
 };
 
 const getHLS = (config, name) => {
-	const url = getHLSAddress(config.hls.host, config.hls.credentials, config.hls.name, config.hls.secure);
+	const url = getHLSAddress(config.hls.host, config.hls.credentials, config.channelid, config.hls.secure);
 
 	return url;
 };
 
 const getRTMP = (config) => {
-	const url = getRTMPAddress(config.rtmp.host, config.rtmp.app, config.rtmp.name, config.rtmp.token, config.rtmp.secure);
+	const url = getRTMPAddress(config.rtmp.host, config.rtmp.app, config.channelid, config.rtmp.token, config.rtmp.secure);
 
 	return url;
 };
 
 const getSRT = (config) => {
-	const url = getSRTAddress(config.srt.host, config.srt.name, config.srt.token, config.srt.passphrase, true);
+	const url = getSRTAddress(config.srt.host, config.channelid, config.srt.token, config.srt.passphrase, true);
 
 	return url;
 };
 
 const getLocalHLS = (config, name) => {
-	let url = getHLSAddress(config.hls.local, '', config.hls.name, false);
+	let url = getHLSAddress(config.hls.local, '', config.channelid, false);
 
 	return url;
 };
 
-const getLocalRTMP = (config) => {
-	return '{rtmp,name=' + config.rtmp.name + '.stream}';
+const getLocalRTMP = (name) => {
+	return '{rtmp,name=' + name + '}';
 };
 
-const getLocalSRT = (config) => {
-	return '{srt,name=' + config.srt.name + '.stream,mode=request}';
+const getLocalSRT = (name) => {
+	return '{srt,name=' + name + ',mode=request}';
 };
 
 const isValidURL = (address) => {
@@ -634,13 +683,13 @@ function AdvancedSettings(props) {
 										? settings.push.type === 'hls'
 											? settings.general.analyzeduration_http
 											: settings.push.type === 'rtmp'
-											? settings.general.analyzeduration_rtmp
-											: settings.general.analyzeduration
+												? settings.general.analyzeduration_rtmp
+												: settings.general.analyzeduration
 										: protocolClass === 'http'
-										? settings.general.analyzeduration_http
-										: protocolClass === 'rtmp'
-										? settings.general.analyzeduration_rtmp
-										: settings.general.analyzeduration
+											? settings.general.analyzeduration_http
+											: protocolClass === 'rtmp'
+												? settings.general.analyzeduration_rtmp
+												: settings.general.analyzeduration
 								}
 								onChange={props.onChange(
 									'general',
@@ -648,13 +697,13 @@ function AdvancedSettings(props) {
 										? settings.push.type === 'hls'
 											? 'analyzeduration_http'
 											: settings.push.type === 'rtmp'
-											? 'analyzeduration_rtmp'
-											: 'analyzeduration'
+												? 'analyzeduration_rtmp'
+												: 'analyzeduration'
 										: protocolClass === 'http'
-										? 'analyzeduration_http'
-										: protocolClass === 'rtmp'
-										? 'analyzeduration_rtmp'
-										: 'analyzeduration'
+											? 'analyzeduration_http'
+											: protocolClass === 'rtmp'
+												? 'analyzeduration_rtmp'
+												: 'analyzeduration',
 								)}
 							/>
 							<Typography variant="caption">
@@ -835,6 +884,16 @@ function Push(props) {
 	);
 }
 
+Push.defaultProps = {
+	knownDevices: [],
+	settings: {},
+	config: {},
+	skills: null,
+	onChange: function (settings) {},
+	onProbe: function (settings, inputs) {},
+	onRefresh: function () {},
+};
+
 function PushHLS(props) {
 	const classes = useStyles();
 	const config = props.config;
@@ -864,6 +923,7 @@ function PushHLS(props) {
 }
 
 function PushRTMP(props) {
+	const { i18n } = useLingui();
 	const classes = useStyles();
 	const navigate = useNavigate();
 	const config = props.config;
@@ -888,21 +948,54 @@ function PushRTMP(props) {
 	} else {
 		const RTMP = getRTMP(config);
 
+		const filteredDevices = props.knownDevices.filter((device) => device.media === 'rtmp');
+		const options = filteredDevices.map((device) => {
+			return (
+				<MenuItem key={device.id} value={device.id}>
+					{device.name}
+				</MenuItem>
+			);
+		});
+
+		options.unshift(
+			<MenuItem key="none" value="none" disabled>
+				{i18n._(t`Choose an input stream ...`)}
+			</MenuItem>,
+		);
+
+		options.push(
+			<MenuItem key={config.channelid} value={config.channelid}>
+				{i18n._(t`Send stream to address ...`)}
+			</MenuItem>,
+		);
+
 		form = (
 			<Grid container alignItems="flex-start" spacing={2} className={classes.gridContainer}>
 				<Grid item xs={12}>
-					<Typography>
-						<Trans>Send stream to this address:</Trans>
-					</Typography>
+					<Select type="select" label={<Trans>Input stream</Trans>} value={props.settings.push.name} onChange={props.onChange('push', 'name')}>
+						{options}
+					</Select>
+					<Button size="small" startIcon={<RefreshIcon />} onClick={props.onRefresh} sx={{ float: 'right' }}>
+						<Trans>Refresh</Trans>
+					</Button>
 				</Grid>
-				<Grid item xs={12}>
-					<BoxTextarea>
-						<Textarea rows={1} value={RTMP} readOnly allowCopy />
-					</BoxTextarea>
-				</Grid>
+				{props.settings.push.name === config.channelid && (
+					<React.Fragment>
+						<Grid item xs={12}>
+							<Typography>
+								<Trans>Address:</Trans>
+							</Typography>
+						</Grid>
+						<Grid item xs={12}>
+							<BoxTextarea>
+								<Textarea rows={1} value={RTMP} readOnly allowCopy />
+							</BoxTextarea>
+						</Grid>
+					</React.Fragment>
+				)}
 				<AdvancedSettings {...props} />
 				<Grid item xs={12}>
-					<FormInlineButton onClick={props.onProbe}>
+					<FormInlineButton onClick={props.onProbe} disabled={props.settings.push.name === 'none'}>
 						<Trans>Probe</Trans>
 					</FormInlineButton>
 				</Grid>
@@ -913,7 +1006,18 @@ function PushRTMP(props) {
 	return form;
 }
 
+PushRTMP.defaultProps = {
+	knownDevices: [],
+	settings: {},
+	config: {},
+	skills: null,
+	onChange: function (settings) {},
+	onProbe: function (settings, inputs) {},
+	onRefresh: function () {},
+};
+
 function PushSRT(props) {
+	const { i18n } = useLingui();
 	const classes = useStyles();
 	const navigate = useNavigate();
 	const config = props.config;
@@ -938,21 +1042,54 @@ function PushSRT(props) {
 	} else {
 		const SRT = getSRT(config);
 
+		const filteredDevices = props.knownDevices.filter((device) => device.media === 'srt');
+		const options = filteredDevices.map((device) => {
+			return (
+				<MenuItem key={device.id} value={device.id}>
+					{device.name}
+				</MenuItem>
+			);
+		});
+
+		options.unshift(
+			<MenuItem key="none" value="none" disabled>
+				{i18n._(t`Choose an input stream ...`)}
+			</MenuItem>,
+		);
+
+		options.push(
+			<MenuItem key={config.channelid} value={config.channelid}>
+				{i18n._(t`Send stream to address ...`)}
+			</MenuItem>,
+		);
+
 		form = (
 			<Grid container alignItems="flex-start" spacing={2} className={classes.gridContainer}>
 				<Grid item xs={12}>
-					<Typography>
-						<Trans>Send stream to this address:</Trans>
-					</Typography>
+					<Select type="select" label={<Trans>Input stream</Trans>} value={props.settings.push.name} onChange={props.onChange('push', 'name')}>
+						{options}
+					</Select>
+					<Button size="small" startIcon={<RefreshIcon />} onClick={props.onRefresh} sx={{ float: 'right' }}>
+						<Trans>Refresh</Trans>
+					</Button>
 				</Grid>
-				<Grid item xs={12}>
-					<BoxTextarea>
-						<Textarea rows={1} value={SRT} readOnly allowCopy />
-					</BoxTextarea>
-				</Grid>
+				{props.settings.push.name === config.channelid && (
+					<React.Fragment>
+						<Grid item xs={12}>
+							<Typography>
+								<Trans>Address:</Trans>
+							</Typography>
+						</Grid>
+						<Grid item xs={12}>
+							<BoxTextarea>
+								<Textarea rows={1} value={SRT} readOnly allowCopy />
+							</BoxTextarea>
+						</Grid>
+					</React.Fragment>
+				)}
 				<AdvancedSettings {...props} />
 				<Grid item xs={12}>
-					<FormInlineButton onClick={props.onProbe}>
+					<FormInlineButton onClick={props.onProbe} disabled={props.settings.push.name === 'none'}>
 						<Trans>Probe</Trans>
 					</FormInlineButton>
 				</Grid>
@@ -963,11 +1100,21 @@ function PushSRT(props) {
 	return form;
 }
 
+PushSRT.defaultProps = {
+	knownDevices: [],
+	settings: {},
+	config: {},
+	skills: null,
+	onChange: function (settings) {},
+	onProbe: function (settings, inputs) {},
+	onRefresh: function () {},
+};
+
 function Source(props) {
 	const classes = useStyles();
 	const { i18n } = useLingui();
-	const settings = initSettings(props.settings);
 	const config = initConfig(props.config);
+	const settings = initSettings(props.settings, config);
 	const skills = initSkills(props.skills);
 
 	const handleChange = (section, what) => (event) => {
@@ -993,6 +1140,9 @@ function Source(props) {
 			}
 		} else if (section === 'push') {
 			settings.push[what] = value;
+			if (what === 'type') {
+				settings.push.name = config.channelid;
+			}
 		} else {
 			settings[what] = value;
 		}
@@ -1004,6 +1154,10 @@ function Source(props) {
 
 	const handleProbe = () => {
 		props.onProbe(settings, createInputs(settings, config, skills));
+	};
+
+	const handleRefresh = () => {
+		props.onRefresh();
 	};
 
 	return (
@@ -1019,13 +1173,22 @@ function Source(props) {
 			{settings.mode === 'pull' ? (
 				<Pull settings={settings} config={config} skills={skills} onChange={handleChange} onProbe={handleProbe} />
 			) : (
-				<Push settings={settings} config={config} skills={skills} onChange={handleChange} onProbe={handleProbe} />
+				<Push
+					settings={settings}
+					config={config}
+					skills={skills}
+					knownDevices={props.knownDevices}
+					onChange={handleChange}
+					onProbe={handleProbe}
+					onRefresh={handleRefresh}
+				/>
 			)}
 		</React.Fragment>
 	);
 }
 
 Source.defaultProps = {
+	knownDevices: [],
 	settings: {},
 	config: {},
 	skills: null,
@@ -1040,7 +1203,7 @@ function SourceIcon(props) {
 const id = 'network';
 const name = <Trans>Network source</Trans>;
 const capabilities = ['audio', 'video'];
-const ffversion = '^4.1.0 || ^5.0.0';
+const ffversion = '^4.1.0 || ^5.0.0 || ^6.1.0';
 
 const func = {
 	initSettings,
