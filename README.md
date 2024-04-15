@@ -1,4 +1,6 @@
-# Restreamer-UI
+# Custom Restreamer-UI
+
+![RestreamerUI](RestreamerUI.jpeg)
 
 The user interface of the Restreamer for the connection to the [datarhei Core](https://github.com/datarhei/core)application.
 
