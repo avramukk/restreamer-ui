@@ -15,6 +15,7 @@ import BoxText from '../../misc/BoxText';
 import EncodingSelect from '../../misc/EncodingSelect';
 import PaperFooter from '../../misc/PaperFooter';
 import ProbeModal from '../../misc/modals/Probe';
+import HintModal from '../../misc/modals/Hint';
 import SourceSelect from './SourceSelect';
 import StreamSelect from './StreamSelect';
 
@@ -39,9 +40,14 @@ export default function Profile(props) {
 		status: 'none',
 	});
 	const [$skillsRefresh, setSkillsRefresh] = React.useState(false);
-	const [$modal, setModal] = React.useState({
+	const [$probeModal, setProbeModal] = React.useState({
 		open: false,
 		data: '',
+	});
+	const [$hintModal, setHintModal] = React.useState({
+		open: false,
+		type: '',
+		streams: [],
 	});
 	const [$activeStep, setActiveStep] = React.useState(props.startWith === 'audio' ? 1 : 0);
 	const [$ready, setReady] = React.useState(false);
@@ -58,14 +64,6 @@ export default function Profile(props) {
 		props.skills.sources.noaudio = [];
 
 		let audio = $sources.audio;
-
-		if ($profile.custom.selected === false) {
-			if ($profile.custom.stream === -1) {
-				audio.type = 'noaudio';
-			} else {
-				audio.type = 'videoaudio';
-			}
-		}
 
 		let hasAudio = false;
 		for (let i = 0; i < $sources.video.streams.length; i++) {
@@ -114,10 +112,18 @@ export default function Profile(props) {
 
 		const res = await props.onProbe(inputs);
 
+		const status = handleProbeStreams(type, device, settings, inputs, res);
+
+		return status === 'success';
+	};
+
+	const handleProbeStreams = (type, device, settings, inputs, res) => {
 		let status = M.analyzeStreams(type, res.streams);
 
 		if (type === 'video') {
-			const profile = M.preselectProfile('video', res.streams, $profile, props.skills.encoders);
+			let audio = $sources.audio;
+
+			const profile = M.preselectProfile('video', res.streams, $profile, props.skills.encoders, audio.type === '');
 
 			// Add pseudo sources
 			props.skills.sources.noaudio = [];
@@ -130,15 +136,23 @@ export default function Profile(props) {
 				}
 			}
 
-			let audio = $sources.audio;
-
 			if (hasAudio === true) {
 				props.skills.sources.videoaudio = [];
-				audio.type = 'videoaudio';
+				if (audio.type === '') {
+					audio.type = 'videoaudio';
+				}
 			} else {
 				delete props.skills.sources.videoaudio;
-				audio = M.initSource('audio', {});
+				if (audio.type === '' || audio.type === 'videoaudio') {
+					audio.type = 'noaudio';
+					profile.audio.source = -1;
+					profile.audio.stream = -1;
+					profile.custom.selected = false;
+					profile.custom.stream = -1;
+				}
 			}
+
+			audio = M.initSource('audio', audio);
 
 			setProfile({
 				...$profile,
@@ -154,7 +168,7 @@ export default function Profile(props) {
 
 			setAudioProbe({
 				...$audioProbe,
-				status: 'none',
+				status: audio.type === 'noaudio' ? 'success' : 'none',
 			});
 
 			setSources({
@@ -192,8 +206,6 @@ export default function Profile(props) {
 				},
 			});
 		}
-
-		return status === 'success';
 	};
 
 	const handleRefresh = async () => {
@@ -240,24 +252,24 @@ export default function Profile(props) {
 		props.onAbort();
 	};
 
-	const handleModal = (type) => (event) => {
+	const handleProbeLogModal = (type) => (event) => {
 		event.preventDefault();
 
 		if (type === 'video') {
-			setModal({
-				...$modal,
+			setProbeModal({
+				...$probeModal,
 				open: true,
 				data: $videoProbe.log.join('\n'),
 			});
 		} else if (type === 'audio') {
-			setModal({
-				...$modal,
+			setProbeModal({
+				...$probeModal,
 				open: true,
 				data: $audioProbe.log.join('\n'),
 			});
 		} else {
-			setModal({
-				...$modal,
+			setProbeModal({
+				...$probeModal,
 				open: false,
 				data: '',
 			});
@@ -272,9 +284,11 @@ export default function Profile(props) {
 			if (source === 'noaudio') {
 				custom.selected = false;
 				custom.stream = -1;
+				profile.source = -1;
 				profile.stream = -1;
 			} else if (source === 'videoaudio') {
 				custom.selected = false;
+				profile.source = 0;
 
 				for (let i = 0; i < $sources.video.streams.length; i++) {
 					if ($sources.video.streams[i].type === 'audio') {
@@ -287,8 +301,25 @@ export default function Profile(props) {
 				custom.selected = true;
 				custom.stream = -2;
 
+				profile.source = 1;
 				profile.stream = -1;
 			}
+
+			let audio = $sources.audio;
+			audio.type = source;
+
+			setSources({
+				...$sources,
+				audio: audio,
+			});
+		} else {
+			let video = $sources.video;
+			video.type = source;
+
+			setSources({
+				...$sources,
+				video: video,
+			});
 		}
 
 		setProfile({
@@ -312,15 +343,137 @@ export default function Profile(props) {
 		}
 	};
 
-	const handleStreamSelect = (type) => (stream) => {
-		const profile = $profile[type];
+	const handleStreamSelect = (type, what) => (stream) => {
+		const profile = $profile;
 
-		profile.stream = stream;
+		profile[type].stream = stream;
+
+		if (what === 'custom') {
+			profile.custom.stream = stream;
+		}
 
 		setProfile({
 			...$profile,
-			[type]: profile,
+			...profile,
 		});
+	};
+
+	const handleHintModal = (type, streams) => (event) => {
+		if (event) {
+			event.preventDefault();
+		}
+
+		if (!streams) {
+			streams = [];
+		}
+
+		if (streams.length > 0) {
+			return streams;
+		}
+
+		if (type === 'video') {
+			streams = [
+				{
+					url: '',
+					index: 0,
+					stream: 0,
+					type: 'video',
+					codec: 'h264',
+					width: 1920,
+					height: 1080,
+					pix_fmt: 'yuv420p',
+					sampling_hz: 0,
+					layout: '',
+					channels: 0,
+				},
+			];
+		} else if (type === 'audio') {
+			streams = [
+				{
+					url: '',
+					index: 1,
+					stream: 0,
+					type: 'audio',
+					codec: 'aac',
+					width: 0,
+					height: 0,
+					sampling_hz: '44100',
+					layout: 'stereo',
+					channels: 2,
+				},
+			];
+		}
+
+		if (type === 'video') {
+			setHintModal({
+				...$hintModal,
+				open: true,
+				type: type,
+				streams: streams,
+			});
+		} else if (type === 'audio') {
+			setHintModal({
+				...$hintModal,
+				open: true,
+				type: type,
+				streams: streams,
+			});
+		} else {
+			setHintModal({
+				...$hintModal,
+				open: false,
+				type: '',
+				streams: [],
+			});
+		}
+	};
+
+	const handleHintChange = (streams) => {
+		setHintModal({
+			...$hintModal,
+			streams: streams,
+		});
+	};
+
+	const handleHintCancel = () => {
+		setHintModal({
+			streams: [],
+		});
+
+		handleHintModal('none')(null);
+	};
+
+	const handleHintDone = () => {
+		const type = $hintModal.type;
+
+		const device = $sources[type].type;
+		const settings = $sources[type].settings;
+		const inputs = $sources[type].inputs;
+		const probe = {
+			streams: $hintModal.streams,
+			log: [],
+		};
+
+		const url = inputs[0].address;
+
+		probe.log.push(`Stream hints for input from '${url}'`);
+
+		for (let s of $hintModal.streams) {
+			s.url = url;
+
+			let stream = `Stream #${s.index}:${s.stream}: `;
+			if (s.type === 'video') {
+				stream += `Video: ${s.codec}, ${s.pix_fmt}, ${s.width}x${s.height}`;
+			} else if (s.type === 'audio') {
+				stream += `Audio: ${s.codec}, ${s.sampling_hz} Hz, ${s.layout}`;
+			}
+
+			probe.log.push(stream);
+		}
+
+		handleProbeStreams(type, device, settings, inputs, probe);
+
+		handleHintModal('none')(null);
 	};
 
 	if ($ready === false) {
@@ -358,10 +511,19 @@ export default function Profile(props) {
 											<Typography>
 												<Trans>
 													Failed to probe the source. Please check the{' '}
-													<Link color="textSecondary" href="#!" onClick={handleModal('video')}>
+													<Link color="textSecondary" href="#!" onClick={handleProbeLogModal('video')}>
 														probe details
 													</Link>
 													.
+												</Trans>
+											</Typography>
+											<Typography>
+												<Trans>
+													In order to proceed anyways, you can provide{' '}
+													<Link color="textSecondary" href="#!" onClick={handleHintModal('video', [])}>
+														hints
+													</Link>{' '}
+													about the available streams.
 												</Trans>
 											</Typography>
 										</BoxText>
@@ -374,7 +536,7 @@ export default function Profile(props) {
 											<Typography>
 												<Trans>
 													The source doesn't provide any video streams. Please check the{' '}
-													<Link href="#!" onClick={handleModal('video')}>
+													<Link href="#!" onClick={handleProbeLogModal('video')}>
 														probe details
 													</Link>
 													.
@@ -396,7 +558,7 @@ export default function Profile(props) {
 										<Grid item xs={12} align="right">
 											<Typography>
 												<Trans>
-													<Link href="#!" onClick={handleModal('video')}>
+													<Link href="#!" onClick={handleProbeLogModal('video')}>
 														Show probe details
 													</Link>
 												</Trans>
@@ -472,7 +634,7 @@ export default function Profile(props) {
 										type="audio"
 										streams={$sources.video.streams}
 										selected={$profile.custom.stream}
-										onChange={handleStreamSelect('audio')}
+										onChange={handleStreamSelect('audio', 'custom')}
 									/>
 								</Grid>
 								<Grid item xs={12}>
@@ -485,7 +647,7 @@ export default function Profile(props) {
 										onChange={handleEncoding('audio')}
 									/>
 								</Grid>
-								{$profile.audio.encoder.coder !== 'none' && $profile.audio.encoder.coder !== 'copy' && (
+								{$profile.audio.encoder.coder !== 'none' && $profile.audio.encoder.coder !== 'copy' && $profile.audio.source !== -1 && (
 									<Grid item xs={12}>
 										<FilterSelect
 											type="audio"
@@ -508,10 +670,19 @@ export default function Profile(props) {
 													<Typography>
 														<Trans>
 															Failed to probe the source. Please check the{' '}
-															<Link href="#!" onClick={handleModal('audio')}>
+															<Link href="#!" onClick={handleProbeLogModal('audio')}>
 																probe details
 															</Link>
 															.
+														</Trans>
+													</Typography>
+													<Typography>
+														<Trans>
+															In order to proceed anyways, you can provide{' '}
+															<Link color="textSecondary" href="#!" onClick={handleHintModal('audio', [])}>
+																hints
+															</Link>{' '}
+															about the available streams.
 														</Trans>
 													</Typography>
 												</BoxText>
@@ -524,7 +695,7 @@ export default function Profile(props) {
 													<Typography>
 														<Trans>
 															The source doesn't provide any audio streams. Please check the{' '}
-															<Link href="#!" onClick={handleModal('audio')}>
+															<Link href="#!" onClick={handleProbeLogModal('audio')}>
 																probe details
 															</Link>
 															.
@@ -546,7 +717,7 @@ export default function Profile(props) {
 												<Grid item xs={12} align="right">
 													<Typography>
 														<Trans>
-															<Link href="#!" onClick={handleModal('audio')}>
+															<Link href="#!" onClick={handleProbeLogModal('audio')}>
 																Show probe details
 															</Link>
 														</Trans>
@@ -604,7 +775,16 @@ export default function Profile(props) {
 			<Backdrop open={$videoProbe.probing || $audioProbe.probing || $skillsRefresh}>
 				<CircularProgress color="inherit" />
 			</Backdrop>
-			<ProbeModal open={$modal.open} onClose={handleModal('none')} data={$modal.data} />
+			<ProbeModal open={$probeModal.open} onClose={handleProbeLogModal('none')} data={$probeModal.data} />
+			<HintModal
+				open={$hintModal.open}
+				onClose={handleHintCancel}
+				onChange={handleHintChange}
+				onDone={handleHintDone}
+				title="Stream hints"
+				type={$hintModal.type}
+				streams={$hintModal.streams}
+			/>
 		</React.Fragment>
 	);
 }

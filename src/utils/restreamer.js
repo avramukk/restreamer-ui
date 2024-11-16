@@ -1611,7 +1611,7 @@ class Restreamer {
 			reference: channel.channelid,
 			input: [],
 			output: [],
-			options: ['-err_detect', 'ignore_err', ...global],
+			options: ['-loglevel', 'level+info', '-err_detect', 'ignore_err', ...global],
 			autostart: control.process.autostart,
 			reconnect: control.process.reconnect,
 			reconnect_delay_seconds: parseInt(control.process.delay),
@@ -2247,6 +2247,7 @@ class Restreamer {
 			player: 'videojs',
 			playersite: false,
 			channelid: 'current',
+			channel_list: this.ListChannels().map((c) => c.channelid),
 			title: 'restreamer',
 			share: true,
 			support: true,
@@ -2311,7 +2312,8 @@ class Restreamer {
 			channel = this.GetChannel(this.GetCurrentChannelID());
 		}
 
-		const channels = this.ListChannels();
+		// filter channels based on the main channel and additional channels
+		const channels = this.ListChannels().filter((c) => settings.channel_list.indexOf(c.channelid) !== -1 || c.channelid === channel.channelid);
 
 		// Handlebars function ifEquals
 		Handlebars.registerHelper('ifEquals', function (arg1, arg2, options) {
@@ -2665,7 +2667,7 @@ class Restreamer {
 				},
 			],
 			output: [],
-			options: ['-err_detect', 'ignore_err', ...global],
+			options: ['-loglevel', 'level+info', '-err_detect', 'ignore_err', ...global],
 			autostart: control.process.autostart,
 			reconnect: control.process.reconnect,
 			reconnect_delay_seconds: parseInt(control.process.delay),
